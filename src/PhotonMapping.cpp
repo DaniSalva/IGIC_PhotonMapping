@@ -136,13 +136,15 @@ bool PhotonMapping::trace_ray(const Ray& r, const Vector3 &p,
 //---------------------------------------------------------------------
 void PhotonMapping::preprocess()
 {
-	int num_Photons = 2024;
+	std::vector<LightSource*> lights =world->light_source_list;
+
+	Vector3 Lpos = world->light(0).get_position;
+	Vector3 Ldir = world->light(0).get_incoming_direction;
+	Vector3 Lint = world->light(0).get_incoming_light;
+
 	bool moreShots = true;
 
 	double_t radius = 2.5;
-	Vector3 center (1.0f, 1.0f, 1.0f);
-	Vector3 intensity(1.0f, 1.0f, 1.0f);
-	center.getComponent(0);
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -151,19 +153,20 @@ void PhotonMapping::preprocess()
 	std::list<Photon> global_photons;
 	std::list<Photon> caustic_photons;
 
+	int level = 0;
+
+
 	while (moreShots){
-		Real randomX=center.getComponent(0)+dis(gen);
-		Real randomY = center.getComponent(1) + dis(gen);
-		Real randomZ = center.getComponent(2) + dis(gen);
+		Real randomX=Lpos.getComponent(0)+dis(gen);
+		Real randomY = Lpos.getComponent(1) + dis(gen);
+		Real randomZ = Lpos.getComponent(2) + dis(gen);
 
 		Vector3 pos (randomX,randomY,randomZ); //Punto aleatorio dentro del cubo
-		Vector3 dir (center.getComponent(0)-randomX,center.getComponent(1)-randomY,center.getComponent(2)-randomZ);
+		Vector3 dir (Lpos.getComponent(0)-randomX,Lpos.getComponent(1)-randomY,Lpos.getComponent(2)-randomZ);
 
-		int level = 0;
-
-		if (insideSphere(center, pos, radius)){ //Mira si está dentro de la esfera
+		if (insideSphere(Lpos, pos, radius)){ //Mira si está dentro de la esfera
 			Ray r(pos, dir, level);
-			moreShots=trace_ray(r, intensity, global_photons, caustic_photons, false);
+			moreShots=trace_ray(r, Lint, global_photons, caustic_photons, false);
 		}
 	}
 
