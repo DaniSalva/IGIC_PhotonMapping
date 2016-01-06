@@ -138,9 +138,10 @@ void PhotonMapping::preprocess()
 {
 	std::vector<LightSource*> lights =world->light_source_list;
 
-	Vector3 Lpos = world->light(0).get_position;
-	Vector3 Ldir = world->light(0).get_incoming_direction;
-	Vector3 Lint = world->light(0).get_incoming_light;
+	Vector3 Lpos = world->light(0).get_position();
+	//Vector3 Ldir = world->light(0).get_incoming_direction;
+	//Vector3 Lint = world->light(0).get_incoming_light();
+	Vector3 Lint = world->light(0).get_incoming_light(Lpos);
 
 	bool moreShots = true;
 
@@ -166,6 +167,8 @@ void PhotonMapping::preprocess()
 
 		if (insideSphere(Lpos, pos, radius)){ //Mira si está dentro de la esfera
 			Ray r(pos, dir, level);
+			
+
 			moreShots=trace_ray(r, Lint, global_photons, caustic_photons, false);
 		}
 	}
@@ -175,11 +178,16 @@ void PhotonMapping::preprocess()
 		Photon photon = *it;
 		m_global_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
 	}
+	cout << "\n";
+	cout << global_photons.size();
+	cout << "\n";
 
 	for (std::list<Photon>::iterator it = caustic_photons.begin(); it != caustic_photons.end(); ++it){
 		Photon photon = *it;
 		m_caustics_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
 	}
+	cout << caustic_photons.size();
+	cout << "\n";
 }
 
 bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
@@ -215,9 +223,9 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 
 	//Codigo ejemplo busqueda mas cercanos
 
-	m_global_map.balance;
+	//m_global_map.balance();
 
-	Vector3 p=it.get_position;
+	Vector3 p=it.get_position();
 
 	std::vector<const KDTree<Photon, 3>::Node*> photons;
 	Real max_distance=10;
