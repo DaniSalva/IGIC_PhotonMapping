@@ -139,6 +139,11 @@ void PhotonMapping::preprocess()
 	std::vector<LightSource*> lights =world->light_source_list;
 
 	Vector3 Lpos = world->light(0).get_position();
+	cout << "\n";
+	cout << Lpos.getComponent(0);
+	cout << Lpos.getComponent(1);
+	cout << Lpos.getComponent(2);
+	cout << "\n";
 	//Vector3 Ldir = world->light(0).get_incoming_direction;
 	//Vector3 Lint = world->light(0).get_incoming_light();
 	Vector3 Lint = world->light(0).get_incoming_light(Lpos);
@@ -156,7 +161,6 @@ void PhotonMapping::preprocess()
 
 	int level = 0;
 
-
 	while (moreShots){
 		Real randomX=Lpos.getComponent(0)+dis(gen);
 		Real randomY = Lpos.getComponent(1) + dis(gen);
@@ -167,8 +171,6 @@ void PhotonMapping::preprocess()
 
 		if (insideSphere(Lpos, pos, radius)){ //Mira si está dentro de la esfera
 			Ray r(pos, dir, level);
-			
-
 			moreShots=trace_ray(r, Lint, global_photons, caustic_photons, false);
 		}
 	}
@@ -188,6 +190,7 @@ void PhotonMapping::preprocess()
 	}
 	cout << caustic_photons.size();
 	cout << "\n";
+
 }
 
 bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
@@ -195,8 +198,7 @@ bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
 	double_t xdiff = pow(point.getComponent(0) - sphere.getComponent(0), 2);
 	double_t ydiff = pow(point.getComponent(1) - sphere.getComponent(1), 2);
 	double_t zdiff = pow(point.getComponent(2) - sphere.getComponent(2), 2);
-
-	if ((xdiff + ydiff + zdiff) < pow(r, 2)){
+	if ((xdiff + ydiff + zdiff) <= pow(r, 2)){
 		return true;
 	}
 	else{
@@ -220,7 +222,6 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	Vector3 L(0);
 	Intersection it(it0); 
 
-
 	//Codigo ejemplo busqueda mas cercanos
 
 	//m_global_map.balance();
@@ -229,8 +230,7 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 
 	std::vector<const KDTree<Photon, 3>::Node*> photons;
 	Real max_distance=10;
-	m_global_map.find(std::vector<Real>(p.data, p.data + 3),
-		m_nb_photons, photons, max_distance);
+	m_global_map.find(std::vector<Real>(p.data, p.data + 3),m_nb_photons, photons, max_distance);
 
 	//**********************************************************************
 	// The following piece of code is included here for two reasons: first
@@ -240,7 +240,7 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	// pieces of code that you won't be using.
 	//
 	unsigned int debug_mode = 6;
-
+	
 	switch (debug_mode)
 	{
 	case 1:
