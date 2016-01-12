@@ -146,7 +146,7 @@ void PhotonMapping::preprocess()
 	cout << "\n";
 	//Vector3 Ldir = world->light(0).get_incoming_direction;
 	//Vector3 Lint = world->light(0).get_incoming_light();
-	Vector3 Lint = world->light(0).get_incoming_light(Lpos);
+	Vector3 Lint = world->light(0).get_intensities();
 
 	bool moreShots = true;
 
@@ -231,6 +231,52 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	std::vector<const KDTree<Photon, 3>::Node*> photons;
 	Real max_distance=10;
 	m_global_map.find(std::vector<Real>(p.data, p.data + 3),m_nb_photons, photons, max_distance);
+	
+	Vector3 normal = it.get_normal();
+	Real ka = 0.2;
+	Real kd = 0.6;
+	Real ks = 0.4;
+	int n= 50;
+	Vector3 albedo = it.intersected()->material()->get_albedo(it);
+
+	//Ambient light
+	Vector3 ambientL = world->get_ambient();
+	L += ka*albedo*ambientL;
+
+	//Direct light
+	if (world->light(0).is_visible(it.get_position())){
+		Vector3 directInt = world->light(0).get_incoming_light(it.get_position());
+		Vector3 dd= world->light(0).get_incoming_direction(it.get_position());
+		Vector3 directDir = dd.operator*(-1);
+		Vector3 dV = it.get_ray().get_direction();
+		Vector3 directV = dV.operator*(-1);
+		Real lambert = 0;
+		//Diffuse 
+		if (kd > 0){
+			lambert = normal.dot(directDir);
+			if (lambert > 0){
+				L += kd*lambert*directInt*albedo;
+			}
+		}
+		
+		//Specular
+		if (ks > 0){
+			Real twice = 2 * lambert;
+			Vector3 aux = normal.operator*(twice);
+			Vector3 LR = aux.operator-(directDir);
+
+			Real dot = directV.dot(LR);
+			if (dot > 0){
+				Real spec = pow(dot, n);
+				L += ks * spec*directInt*albedo;
+			}
+		}
+	}
+
+	//Indirect light
+
+
+
 
 	//**********************************************************************
 	// The following piece of code is included here for two reasons: first
@@ -239,7 +285,7 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	// will need when doing the work. Goes without saying: remove the 
 	// pieces of code that you won't be using.
 	//
-	unsigned int debug_mode = 6;
+	unsigned int debug_mode = 0;
 	
 	switch (debug_mode)
 	{
