@@ -4,3 +4,5 @@ SmallPM_vs2010.vcxproj
 SmallPM_vs2010.vcxproj.user
 SmallRT/
 include/
+SmallPM.vcxproj
+SmallPM.vcxproj.filters
