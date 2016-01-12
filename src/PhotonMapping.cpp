@@ -136,48 +136,74 @@ bool PhotonMapping::trace_ray(const Ray& r, const Vector3 &p,
 //---------------------------------------------------------------------
 void PhotonMapping::preprocess()
 {
+	std::vector<LightSource*> lights =world->light_source_list;
+
+	Vector3 Lpos = world->light(0).get_position();
+	cout << "\n";
+	cout << Lpos.getComponent(0);
+	cout << Lpos.getComponent(1);
+	cout << Lpos.getComponent(2);
+	cout << "\n";
+	//Vector3 Ldir = world->light(0).get_incoming_direction;
+	//Vector3 Lint = world->light(0).get_incoming_light();
+	Vector3 Lint = world->light(0).get_incoming_light(Lpos);
+
+	bool moreShots = true;
 
 	double_t radius = 2.5;
-	Vector3 center (1.0f, 1.0f, 1.0f);
-	Vector3 intensity(1.0f, 1.0f, 1.0f);
-	center.getComponent(0);
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_real_distribution<> dis(-radius, radius);
-	for (int n = 0; n < 2024; ++n) {
-		Real randomX=center.getComponent(0)+dis(gen);
-		Real randomY = center.getComponent(1) + dis(gen);
-		Real randomZ = center.getComponent(2) + dis(gen);
 
-		Vector3 pos (randomX,randomY,randomZ);
-		Vector3 dir;
-		int level = 0;
-		//Generar x,y,z aleatorios y ver si están dentro de la esfera (x-xe)2+(y-ye)2+(z-ze)2<r2
-		Ray r (pos, dir, level);
+	std::list<Photon> global_photons;
+	std::list<Photon> caustic_photons;
 
-		std::list<Photon> global_photons;
-		std::list<Photon> caustic_photons;
+	int level = 0;
 
-		trace_ray(r, intensity, global_photons, caustic_photons, false);
+	while (moreShots){
+		Real randomX=Lpos.getComponent(0)+dis(gen);
+		Real randomY = Lpos.getComponent(1) + dis(gen);
+		Real randomZ = Lpos.getComponent(2) + dis(gen);
+
+		Vector3 pos (randomX,randomY,randomZ); //Punto aleatorio dentro del cubo
+		Vector3 dir (Lpos.getComponent(0)-randomX,Lpos.getComponent(1)-randomY,Lpos.getComponent(2)-randomZ);
+
+		if (insideSphere(Lpos, pos, radius)){ //Mira si está dentro de la esfera
+			Ray r(pos, dir, level);
+			moreShots=trace_ray(r, Lint, global_photons, caustic_photons, false);
+		}
 	}
 
-	//Trazar rayo desde centro al punto aleatorio y usar trace_ray
-	
+	//Guardar en KDTREE
+	for (std::list<Photon>::iterator it = global_photons.begin(); it != global_photons.end(); ++it){
+		Photon photon = *it;
+		m_global_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
+	}
+	cout << "\n";
+	cout << global_photons.size();
+	cout << "\n";
 
-
-	//muestrar luz para ver donde trazamos primer rayo-->usar "como muestrear una esfera" para ver si va bien
-	
-	//Usando trace_ray --> devuelve dos listas de fotones, difusos y causticos. (((Flag direct, guardar 1er foton o no NORMAL A FALSE)))
-
-	//Definir numero maximo fotones--> vamos muestreando la luz hasta el maximo
-
-	//Guardar mapa fotones con KDTRREE ---> VER README y el .h
+	for (std::list<Photon>::iterator it = caustic_photons.begin(); it != caustic_photons.end(); ++it){
+		Photon photon = *it;
+		m_caustics_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
+	}
+	cout << caustic_photons.size();
+	cout << "\n";
 
 }
 
-bool PhotonMapping::insideSphere(Vector3 sphere, Vector3 point){
+bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
 
+	double_t xdiff = pow(point.getComponent(0) - sphere.getComponent(0), 2);
+	double_t ydiff = pow(point.getComponent(1) - sphere.getComponent(1), 2);
+	double_t zdiff = pow(point.getComponent(2) - sphere.getComponent(2), 2);
+	if ((xdiff + ydiff + zdiff) <= pow(r, 2)){
+		return true;
+	}
+	else{
+		return false;
+	}
 }
 
 //*********************************************************************
@@ -196,6 +222,16 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	Vector3 L(0);
 	Intersection it(it0); 
 
+	//Codigo ejemplo busqueda mas cercanos
+
+	//m_global_map.balance();
+
+	Vector3 p=it.get_position();
+
+	std::vector<const KDTree<Photon, 3>::Node*> photons;
+	Real max_distance=10;
+	m_global_map.find(std::vector<Real>(p.data, p.data + 3),m_nb_photons, photons, max_distance);
+
 	//**********************************************************************
 	// The following piece of code is included here for two reasons: first
 	// it works as a 'hello world' code to check that everthing compiles 
@@ -203,8 +239,8 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	// will need when doing the work. Goes without saying: remove the 
 	// pieces of code that you won't be using.
 	//
-	unsigned int debug_mode = 1;
-
+	unsigned int debug_mode = 6;
+	
 	switch (debug_mode)
 	{
 	case 1:
