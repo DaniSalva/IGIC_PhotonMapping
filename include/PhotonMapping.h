@@ -85,6 +85,8 @@ public:
 	// pass.
 	void preprocess();
 
+	bool insideSphere(Vector3 &center, Vector3 &point, double_t &r);
+
 	// Computes shading at the intersection 'it0' and returns the estimated
 	// radiance.
 	Vector3 shade(Intersection &it0)const;
