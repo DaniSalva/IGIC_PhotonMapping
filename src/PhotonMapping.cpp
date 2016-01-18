@@ -237,6 +237,12 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 
 	//m_global_map.balance();
 
+	Vector3 p=it.get_position();
+
+	std::vector<const KDTree<Photon, 3>::Node*> photons;
+	Real max_distance=10;
+	m_global_map.find(std::vector<Real>(p.data, p.data + 3),m_nb_photons, photons, max_distance);
+	
 	Vector3 normal = it.get_normal();
 	Real ka = 0.2;
 	Real kd = 0.6;
