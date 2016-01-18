@@ -152,7 +152,7 @@ void PhotonMapping::preprocess()
 
 	bool moreShots = true;
 
-	double_t radius = 2.5;
+	double_t radius = 1;
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -168,10 +168,12 @@ void PhotonMapping::preprocess()
 		Real randomY = Lpos.getComponent(1) + dis(gen);
 		Real randomZ = Lpos.getComponent(2) + dis(gen);
 
+
+
 		Vector3 pos(randomX, randomY, randomZ); //Punto aleatorio dentro del cubo
 		Vector3 dir(Lpos.getComponent(0) - randomX, Lpos.getComponent(1) - randomY, Lpos.getComponent(2) - randomZ);
 
-		if (insideSphere(Lpos, pos, radius)){ //Mira si está dentro de la esfera
+		if (randomX*randomX + randomY*randomY + randomZ*randomZ <= 1){ //Mira si está dentro de la esfera
 			Ray r(pos, dir, level);
 			moreShots = trace_ray(r, Lint, global_photons, caustic_photons, false);
 		}
@@ -190,9 +192,12 @@ void PhotonMapping::preprocess()
 		Photon photon = *it;
 		m_caustics_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
 	}
-	m_global_map.balance();
-	m_caustics_map.balance();
 
+	//Balanceo de los arboles
+	m_global_map.balance();
+
+	if (!m_caustics_map.is_empty())
+		m_caustics_map.balance();
 
 	cout << caustic_photons.size();
 	cout << "\n";
@@ -278,28 +283,18 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	//Coger n fotones más cercanos
 	Vector3 p = it.get_position();
 	std::vector<const KDTree<Photon, 3>::Node*> photons;
-	Real max_distance = 10; //Radio de la circunferencia
+	Real max_distance = 0; //Radio de la circunferencia
 	m_global_map.find(std::vector<Real>(p.data, p.data + 3), m_nb_photons, photons, max_distance);
-
 	double A = M_PI*max_distance*max_distance;
 	Vector3 irradiance(0, 0, 0);
 	for (const KDTree<Photon, 3>::Node* n : photons){
 		Photon ph = n->data();
 		double dot = normal.dot(ph.direction);
 		if (dot < 0.0) continue;
-		irradiance += ph.flux;
+		irradiance += ph.flux * albedo;
 	}
-
-	L += irradiance * (1 / A);
-
-
-
-
-
-
-
-
-
+	irradiance = irradiance / 256;
+	L+= irradiance * (1 / A) ;
 
 	//**********************************************************************
 	// The following piece of code is included here for two reasons: first
