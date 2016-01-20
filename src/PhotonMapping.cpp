@@ -18,6 +18,7 @@ In no event shall copyright holders be liable for any damage.
 #include "BSDF.h"
 #include <random>
 #include <iostream>
+#include <math.h>
 
 #define M_PI           3.14159265358979323846  /* pi */
 
@@ -156,7 +157,8 @@ void PhotonMapping::preprocess()
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
-	std::uniform_real_distribution<> dis(-radius, radius);
+	std::uniform_real_distribution<Real> dis(-1, 1);
+	std::uniform_real_distribution<Real> dis2(0, 2*M_PI);
 
 	std::list<Photon> global_photons;
 	std::list<Photon> caustic_photons;
@@ -164,17 +166,22 @@ void PhotonMapping::preprocess()
 	int level = 0;
 
 	while (moreShots){
+
+		Real randomZ = dis(gen);
+		Real r = sqrt(1 - (randomZ*randomZ));
+		Real angle = dis2(gen);
+		Real randomX = r*cos(angle);
+		Real randomY = r*sin(angle);
+
+			/*
 		Real randomX = Lpos.getComponent(0) + dis(gen);
 		Real randomY = Lpos.getComponent(1) + dis(gen);
-		Real randomZ = Lpos.getComponent(2) + dis(gen);
+		Real randomZ = Lpos.getComponent(2) + dis(gen);*/
 
+		Vector3 dir(randomX,randomY,randomZ);
 
-
-		Vector3 pos(randomX, randomY, randomZ); //Punto aleatorio dentro del cubo
-		Vector3 dir(Lpos.getComponent(0) - randomX, Lpos.getComponent(1) - randomY, Lpos.getComponent(2) - randomZ);
-
-		if (randomX*randomX + randomY*randomY + randomZ*randomZ <= 1){ //Mira si está dentro de la esfera
-			Ray r(pos, dir, level);
+		if (randomX*randomX + randomY*randomY + randomZ*randomZ == 1){ //Mira si está dentro de la esfera
+			Ray r(Lpos, dir, level);
 			moreShots = trace_ray(r, Lint, global_photons, caustic_photons, false);
 		}
 	}
@@ -254,13 +261,16 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	Vector3 ambientL = world->get_ambient();
 	L += ka*albedo*ambientL;
 
+	//Vectors V, L
+	Vector3 directInt = world->light(0).get_incoming_light(it.get_position()); //Intensidad luz
+	Vector3 dd = world->light(0).get_incoming_direction(it.get_position());	  //Direccion rayo desde luz
+	Vector3 directDir = dd.operator*(-1);									  //Direccion rayo desde luz corregido
+	Vector3 dV = it.get_ray().get_direction(); //Direccion rayo del punto al ojo
+	Vector3 directV = dV.operator*(-1);			//Direccion rayo del punto al ojo corregido
+
 	//Direct light
 	if (world->light(0).is_visible(it.get_position())){
-		Vector3 directInt = world->light(0).get_incoming_light(it.get_position());
-		Vector3 dd = world->light(0).get_incoming_direction(it.get_position());
-		Vector3 directDir = dd.operator*(-1);
-		Vector3 dV = it.get_ray().get_direction();
-		Vector3 directV = dV.operator*(-1);
+		
 		Real lambert = 0;
 		//Diffuse 
 		if (kd > 0){
@@ -284,24 +294,41 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 		}
 	}
 
-	//Indirect light
+	//TODO: Revisar y terminar esto
+	if (it.intersected()->material()->is_delta()){
+		//reflejar y refractar! --> estimacion de radiancia solo cuando da en objeto opaco
+		//REFLEJADO
+		double_t twice = 2 * directV.dot(normal);
+		Vector3 aux = normal.operator*(twice);
+		Vector3 LR = aux.operator-(directV);
+		LR.normalize();
 
-	//Coger n fotones más cercanos
-	Vector3 p = it.get_position();
-	std::vector<const KDTree<Photon, 3>::Node*> photons;
-	Real max_distance = 0; //Radio de la circunferencia
-	m_global_map.find(std::vector<Real>(p.data, p.data + 3), m_nb_photons, photons, max_distance);
-	double A = M_PI*max_distance*max_distance;
-	Vector3 irradiance(0, 0, 0);
-	for (const KDTree<Photon, 3>::Node* n : photons){
-		Photon ph = n->data();
-		double dot = normal.dot(ph.direction);
-		if (dot < 0.0) continue;
-		irradiance += ph.flux * albedo;
+		//REFRACTADO
+
+
+		/*Vector3 dir;
+		Ray ray(p, dir, 1); //level recursion rayo????
+		world->trace(ray);*/
 	}
-	irradiance = irradiance / 256;
-	L+= irradiance * (1 / A) ;
+	else{ //Es opaco --> Estimacion de radiancia
+		//Indirect light
 
+		//Coger n fotones más cercanos
+		//std::vector<const KDTree<Photon, 3>::Node*> photons;
+		//Real max_distance = 0; //Radio de la circunferencia
+		m_global_map.find(std::vector<Real>(p.data, p.data + 3), m_nb_photons, photons, max_distance);
+		double A = M_PI*max_distance*max_distance;
+		Vector3 irradiance(0, 0, 0);
+		for (const KDTree<Photon, 3>::Node* n : photons){
+			Photon ph = n->data();
+			double dot = normal.dot(ph.direction);
+			if (dot < 0.0) continue;
+			irradiance += ph.flux * albedo;
+		}
+		irradiance = irradiance / 256;
+		L += irradiance * (1 / A);
+	}
+	
 	//**********************************************************************
 	// The following piece of code is included here for two reasons: first
 	// it works as a 'hello world' code to check that everthing compiles 
