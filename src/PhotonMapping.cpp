@@ -180,10 +180,10 @@ void PhotonMapping::preprocess()
 
 		Vector3 dir(randomX,randomY,randomZ);
 
-		if (randomX*randomX + randomY*randomY + randomZ*randomZ == 1){ //Mira si está dentro de la esfera
-			Ray r(Lpos, dir, level);
-			moreShots = trace_ray(r, Lint, global_photons, caustic_photons, false);
-		}
+		//if (randomX*randomX + randomY*randomY + randomZ*randomZ == 1){ //Mira si está dentro de la esfera
+			Ray ry(Lpos, dir, level);
+			moreShots = trace_ray(ry, Lint, global_photons, caustic_photons, false);
+		//}
 	}
 
 	//Guardar en KDTREE
@@ -322,7 +322,7 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 		for (const KDTree<Photon, 3>::Node* n : photons){
 			Photon ph = n->data();
 			double dot = normal.dot(ph.direction);
-			if (dot < 0.0) continue;
+			if (dot >= 0.0) continue;
 			irradiance += ph.flux * albedo;
 		}
 		irradiance = irradiance / 256;
