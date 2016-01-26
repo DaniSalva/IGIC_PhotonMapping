@@ -21,6 +21,8 @@ In no event shall copyright holders be liable for any damage.
 #include <math.h>
 
 #define M_PI           3.14159265358979323846  /* pi */
+#define M_MAX_DEPTH	   5
+#define M_MIN_PHOTON   8
 
 //*********************************************************************
 // Compute the photons by tracing the Ray 'r' from the light source
@@ -140,75 +142,77 @@ bool PhotonMapping::trace_ray(const Ray& r, const Vector3 &p,
 void PhotonMapping::preprocess()
 {
 	std::vector<LightSource*> lights = world->light_source_list;
+	bool caustics = false;
+	bool globals = false;
+	for (LightSource* l : world->light_source_list){
+		Vector3 Lpos = l->get_position();
+		cout << "\n";
+		cout << Lpos.getComponent(0);
+		cout << Lpos.getComponent(1);
+		cout << Lpos.getComponent(2);
+		cout << "\n";
+		//Vector3 Ldir = world->light(0).get_incoming_direction;
+		//Vector3 Lint = world->light(0).get_incoming_light();
+		Vector3 Lint = l->get_intensities();
 
-	Vector3 Lpos = world->light(0).get_position();
-	cout << "\n";
-	cout << Lpos.getComponent(0);
-	cout << Lpos.getComponent(1);
-	cout << Lpos.getComponent(2);
-	cout << "\n";
-	//Vector3 Ldir = world->light(0).get_incoming_direction;
-	//Vector3 Lint = world->light(0).get_incoming_light();
-	Vector3 Lint = world->light(0).get_intensities();
+		bool moreShots = true;
 
-	bool moreShots = true;
+		double_t radius = 1;
 
-	double_t radius = 1;
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::uniform_real_distribution<Real> dis(-1, 1);
+		std::uniform_real_distribution<Real> dis2(0, 2 * M_PI);
 
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_real_distribution<Real> dis(-1, 1);
-	std::uniform_real_distribution<Real> dis2(0, 2*M_PI);
+		std::list<Photon> global_photons;
+		std::list<Photon> caustic_photons;
 
-	std::list<Photon> global_photons;
-	std::list<Photon> caustic_photons;
+		int level = 3;
 
-	int level = 0;
+		while (moreShots){
 
-	while (moreShots){
+			/*Real randomZ = dis(gen);
+			Real r = sqrt(1 - (randomZ*randomZ));
+			Real angle = dis2(gen);
+			Real randomX = r*cos(angle);
+			Real randomY = r*sin(angle);*/
 
-		Real randomZ = dis(gen);
-		Real r = sqrt(1 - (randomZ*randomZ));
-		Real angle = dis2(gen);
-		Real randomX = r*cos(angle);
-		Real randomY = r*sin(angle);
 
-			/*
-		Real randomX = Lpos.getComponent(0) + dis(gen);
-		Real randomY = Lpos.getComponent(1) + dis(gen);
-		Real randomZ = Lpos.getComponent(2) + dis(gen);*/
+			Real randomX = dis(gen);
+			Real randomY = dis(gen);
+			Real randomZ = dis(gen);
 
-		Vector3 dir(randomX,randomY,randomZ);
+			Vector3 dir(randomX, randomY, randomZ);
 
-		//if (randomX*randomX + randomY*randomY + randomZ*randomZ == 1){ //Mira si está dentro de la esfera
-			Ray ry(Lpos, dir, level);
-			moreShots = trace_ray(ry, Lint, global_photons, caustic_photons, false);
-		//}
-	}
+			if (randomX*randomX + randomY*randomY + randomZ*randomZ <= 1){
+				Ray ry(Lpos, dir, 0);
+				moreShots = trace_ray(ry, Lint, global_photons, caustic_photons, false);
+			}
+		}
 
-	//Guardar en KDTREE
-	for (std::list<Photon>::iterator it = global_photons.begin(); it != global_photons.end(); ++it){
-		Photon photon = *it;
-		m_global_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
-	}
-	cout << "\n";
-	cout << global_photons.size();
-	cout << "\n";
+		if (global_photons.size() > 0)
+			globals = true;
+		if (caustic_photons.size() > 0)
+			caustics = true;
 
-	for (std::list<Photon>::iterator it = caustic_photons.begin(); it != caustic_photons.end(); ++it){
-		Photon photon = *it;
-		m_caustics_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
+		//Guardar en KDTREE
+		for (std::list<Photon>::iterator it = global_photons.begin(); it != global_photons.end(); ++it){
+			Photon photon = *it;
+			m_global_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
+		}
+
+		for (std::list<Photon>::iterator it = caustic_photons.begin(); it != caustic_photons.end(); ++it){
+			Photon photon = *it;
+			m_caustics_map.store(std::vector<Real>(photon.position.data, photon.position.data + 3), photon);
+		}
 	}
 
 	//Balanceo de los arboles
-	m_global_map.balance();
+	if (globals)
+		m_global_map.balance();
 
-	if (!m_caustics_map.is_empty())
+	if (caustics)
 		m_caustics_map.balance();
-
-	cout << caustic_photons.size();
-	cout << "\n";
-
 }
 
 bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
@@ -223,7 +227,26 @@ bool PhotonMapping::insideSphere(Vector3 &sphere, Vector3 &point, double_t &r){
 		return false;
 	}
 }
+Vector3 PhotonMapping::irradianceEstimate(KDTree<Photon, 3> tree, Intersection it, float k,
+	Vector3 normal, Vector3 p, Vector3 albedo)const{
+	float max_distance, A;
+	Vector3 irradiance(0, 0, 0);
+	std::vector<const KDTree<Photon, 3>::Node*> list;
 
+	tree.find(std::vector<Real>(p.data, p.data + 3), m_nb_photons, list, max_distance);
+	A = M_PI*max_distance*max_distance;
+
+	for (const KDTree<Photon, 3>::Node* n : list){
+		Photon ph = n->data();
+		double dot = normal.dot(ph.direction);
+		if (dot >= 0.0) continue;
+		Vector3 vd = (ph.position - it.get_position());
+		float wpc = (1 - (vd.length() / (k*max_distance)));
+		irradiance += ph.flux * albedo * wpc;
+	}
+	//Cone filtering
+	return irradiance / ((1 - (2 / 3 * k))*A);
+}
 //*********************************************************************
 // TODO: Implement the function that computes the rendering equation 
 // using radiance estimation with photon mapping, using the photon
@@ -240,145 +263,74 @@ Vector3 PhotonMapping::shade(Intersection &it0)const
 	Vector3 L(0);
 	Intersection it(it0);
 
-	//Codigo ejemplo busqueda mas cercanos
-
-	//m_global_map.balance();
-
-	Vector3 p=it.get_position();
-
-	std::vector<const KDTree<Photon, 3>::Node*> photons;
-	Real max_distance=10;
-	m_global_map.find(std::vector<Real>(p.data, p.data + 3),m_nb_photons, photons, max_distance);
-	
+	Vector3 p = it.get_position();
 	Vector3 normal = it.get_normal();
-	Real ka = 0.2;
-	Real kd = 0.6;
-	Real ks = 0.4;
+
 	int n = 50;
 	Vector3 albedo = it.intersected()->material()->get_albedo(it);
 
-	//Ambient light
-	Vector3 ambientL = world->get_ambient();
-	L += ka*albedo*ambientL;
-
-	//Vectors V, L
-	Vector3 directInt = world->light(0).get_incoming_light(it.get_position()); //Intensidad luz
-	Vector3 dd = world->light(0).get_incoming_direction(it.get_position());	  //Direccion rayo desde luz
-	Vector3 directDir = dd.operator*(-1);									  //Direccion rayo desde luz corregido
-	Vector3 dV = it.get_ray().get_direction(); //Direccion rayo del punto al ojo
+	Vector3 dV = it.get_ray().get_direction();  //Direccion rayo del punto al ojo
 	Vector3 directV = dV.operator*(-1);			//Direccion rayo del punto al ojo corregido
+	Vector3 ambientL = world->get_ambient();
 
-	//Direct light
-	if (world->light(0).is_visible(it.get_position())){
-		
-		Real lambert = 0;
-		//Diffuse 
-		if (kd > 0){
+	for (LightSource* l : world->light_source_list){
+
+		//Ambient light
+		L += albedo*ambientL;
+
+		//Vectors V, L
+		Vector3 directInt = l->get_incoming_light(it.get_position()); //Intensidad luz
+		Vector3 dd = l->get_incoming_direction(it.get_position());	  //Direccion rayo desde luz
+		Vector3 directDir = dd.operator*(-1);						  //Direccion rayo desde luz corregido
+
+		//Direct light
+		if (l->is_visible(it.get_position())){
+
+			Real lambert = 0;
+			//Diffuse 
 			lambert = normal.dot(directDir);
 			if (lambert > 0){
-				L += kd*lambert*directInt*albedo;
+				L += lambert*directInt*albedo;
 			}
-		}
 
-		//Specular
-		if (ks > 0){
+			//Specular
 			Real twice = 2 * lambert;
 			Vector3 aux = normal.operator*(twice);
 			Vector3 LR = aux.operator-(directDir);
-
 			Real dot = directV.dot(LR);
 			if (dot > 0){
 				Real spec = pow(dot, n);
-				L += ks * spec*directInt*albedo;
+				L += spec*directInt*albedo;
 			}
 		}
 	}
-
 	//TODO: Revisar y terminar esto
 	if (it.intersected()->material()->is_delta()){
-		//reflejar y refractar! --> estimacion de radiancia solo cuando da en objeto opaco
-		//REFLEJADO
-		double_t twice = 2 * directV.dot(normal);
-		Vector3 aux = normal.operator*(twice);
-		Vector3 LR = aux.operator-(directV);
-		LR.normalize();
-
-		//REFRACTADO
-
-
-		/*Vector3 dir;
-		Ray ray(p, dir, 1); //level recursion rayo????
-		world->trace(ray);*/
-	}
-	else{ //Es opaco --> Estimacion de radiancia
-		//Indirect light
-
-		//Coger n fotones más cercanos
-		//std::vector<const KDTree<Photon, 3>::Node*> photons;
-		//Real max_distance = 0; //Radio de la circunferencia
-		m_global_map.find(std::vector<Real>(p.data, p.data + 3), m_nb_photons, photons, max_distance);
-		double A = M_PI*max_distance*max_distance;
-		Vector3 irradiance(0, 0, 0);
-		for (const KDTree<Photon, 3>::Node* n : photons){
-			Photon ph = n->data();
-			double dot = normal.dot(ph.direction);
-			if (dot >= 0.0) continue;
-			irradiance += ph.flux * albedo;
+		Ray ray;
+		Real ignore(0);
+		Intersection itdelta;
+		it.intersected()->material()->get_outgoing_sample_ray(it, ray, ignore);
+		ray.shift();
+		world->first_intersection(ray, itdelta);
+		int i = 0;
+		while (itdelta.did_hit() && itdelta.intersected()->material()->is_delta() && i < M_MAX_DEPTH){
+			itdelta.intersected()->material()->get_outgoing_sample_ray(itdelta, ray, ignore);
+			world->first_intersection(ray, itdelta);
+			i++;
 		}
-		irradiance = irradiance / 256;
-		L += irradiance * (1 / A);
+
+		if (itdelta.did_hit() && i < M_MAX_DEPTH){
+			Vector3 color = shade(itdelta);
+			L += color;
+		}
 	}
-	
-	//**********************************************************************
-	// The following piece of code is included here for two reasons: first
-	// it works as a 'hello world' code to check that everthing compiles 
-	// just fine, and second, to illustrate some of the functions that you 
-	// will need when doing the work. Goes without saying: remove the 
-	// pieces of code that you won't be using.
-	//
-	unsigned int debug_mode = 0;
-
-	switch (debug_mode)
-	{
-	case 1:
-		// ----------------------------------------------------------------
-		// Display Albedo Only
-		L = it.intersected()->material()->get_albedo(it);
-		break;
-	case 2:
-		// ----------------------------------------------------------------
-		// Display Normal Buffer
-		L = it.get_normal();
-		break;
-	case 3:
-		// ----------------------------------------------------------------
-		// Display whether the material is specular (or refractive) 
-		L = Vector3(it.intersected()->material()->is_delta());
-
-		//Aqui no tiene sentido el fotonMapping
-		break;
-
-	case 4:
-		// ----------------------------------------------------------------
-		// Display incoming illumination from light(0)
-		L = world->light(0).get_incoming_light(it.get_position());
-		break;
-
-	case 5:
-		// ----------------------------------------------------------------
-		// Display incoming direction from light(0)
-		L = world->light(0).get_incoming_direction(it.get_position());
-		break;
-
-	case 6:
-		// ----------------------------------------------------------------
-		// Check Visibility from light(0)
-		if (world->light(0).is_visible(it.get_position()))
-			L = Vector3(1.);
-		break;
+	else{
+		//Es opaco --> Estimacion de radiancia
+		//Coger n fotones más cercanos
+		float k(1.0); //Constante de filtrado
+		L += irradianceEstimate(m_caustics_map, it, k, normal, p, albedo);
+		L += irradianceEstimate(m_global_map, it, k, normal, p, albedo);
 	}
-	// End of exampled code
-	//**********************************************************************
-
 	return L;
 }
+

@@ -90,6 +90,8 @@ public:
 	// Computes shading at the intersection 'it0' and returns the estimated
 	// radiance.
 	Vector3 shade(Intersection &it0)const;
+	Vector3 irradianceEstimate(KDTree<Photon, 3> tree, Intersection it, float k, Vector3 normal, Vector3 p, Vector3 albedo)const;
 };
+
 
 #endif
